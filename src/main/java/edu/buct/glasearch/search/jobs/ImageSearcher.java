@@ -88,26 +88,29 @@ public class ImageSearcher {
 
 	public static final String COLOR_FEATURE = "color_f";
 	public static final String EDGE_FEATURE = "edge_f";
-	public static final String SEARCH_RESULT = "result";
-	public static final String SEARCH_ROWID = "search_rowid";
-
-	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
 	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes(COLOR_FEATURE);
 	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes(EDGE_FEATURE);
 	
-	public static final byte[] RESULT_COLUMN = Bytes.toBytes(SEARCH_RESULT);
+	public static final String COLOR_FEATURE_RESULT = "color_r";
+	public static final String EDGE_FEATURE_RESULT = "edge_r";
+	public static final byte[] COLOR_FEATURE_RESULT_COLUMN = Bytes.toBytes(COLOR_FEATURE_RESULT);
+	public static final byte[] EDGE_FEATURE_RESULT_COLUMN = Bytes.toBytes(EDGE_FEATURE_RESULT);
+	
+	public static final String SEARCH_ROWID = "search_rowid";
+
+	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
 	
 	private static final String imageInfoTable = "imageinfo";
 	
-	private ImmutableBytesWritable imageInfoTableBytes = 
+	private static ImmutableBytesWritable imageInfoTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageInfoTable));
 	
 	private static final String imageResultTable = "imageresult";
 	
-	private ImmutableBytesWritable imageResultTableBytes = 
+	private static ImmutableBytesWritable imageResultTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageResultTable));
 
-	public class Map extends Mapper<ImmutableBytesWritable, Result, Text, Text> {
+	public static class Map extends Mapper<ImmutableBytesWritable, Result, Text, Text> {
 		
 		FileSystem fs = null;
 		
@@ -135,11 +138,11 @@ public class ImageSearcher {
 			
 			LireFeature targetEdgeFeature = new EdgeHistogram();
 			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
-			float edgeDistance = targetEdgeFeature.getDistance(targetEdgeFeature);
+			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);
 			FeatureObject edgeFeatureObject = new FeatureObject(rowId, edgeDistance);
 			
-			context.write(new Text(COLOR_FEATURE), new Text(gson.toJson(colorFeatureObject)));
-			context.write(new Text(EDGE_FEATURE), new Text(gson.toJson(edgeFeatureObject)));
+			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
+			context.write(new Text(EDGE_FEATURE_RESULT), new Text(gson.toJson(edgeFeatureObject)));
 		}
 	
 		@Override
@@ -168,7 +171,7 @@ public class ImageSearcher {
 		}
 	}
 
-	public class Reduce extends Reducer<Text, Text, ImmutableBytesWritable, Put> {
+	public static class Reduce extends Reducer<Text, Text, ImmutableBytesWritable, Put> {
 		
 		int defaultResultSize = 10;
 		
@@ -191,10 +194,12 @@ public class ImageSearcher {
 			
 			Collections.sort(features);
 			features = features.subList(0, defaultResultSize);
-			String result = gson.toJson(features);
+			
+			SearchResult resultObject = new SearchResult(features);
+			String result = gson.toJson(resultObject);
 
 			Put put = new Put(searchRowId.getBytes());
-			put.add(COLUMN_FAMILY, rowKey.getBytes(), result.getBytes());
+			put.add(COLUMN_FAMILY, rowKey.toString().getBytes(), result.getBytes());
 			context.write(imageResultTableBytes, put);
 		}
 	
@@ -208,7 +213,7 @@ public class ImageSearcher {
 		}
 	}
 	
-	public class FeatureObject implements Comparable<FeatureObject> {
+	public static class FeatureObject implements Comparable<FeatureObject> {
 		
 		private String rowId;
 
@@ -243,6 +248,25 @@ public class ImageSearcher {
 			return this.distance > o.distance ? 1 : (this.distance == o.distance ? 0 : -1);
 		}
 	}
+	
+	public static class SearchResult {
+		
+		private List<FeatureObject> result;
+
+		public SearchResult(List<FeatureObject> result) {
+			super();
+			this.result = result;
+		}
+
+		public List<FeatureObject> getResult() {
+			return result;
+		}
+
+		public void setResult(List<FeatureObject> result) {
+			this.result = result;
+		}
+		
+	}
 
 	/**
 	 * Job configuration.
@@ -263,6 +287,7 @@ public class ImageSearcher {
 		job.setMapperClass(ImageSearcher.Map.class);
 		job.setReducerClass(ImageSearcher.Reduce.class);
 		job.setInputFormatClass(TableInputFormat.class);
+		job.setMapOutputKeyClass(Text.class);
 		job.setOutputFormatClass(MultiTableOutputFormat.class);
 		return job;
 	}
@@ -271,8 +296,8 @@ public class ImageSearcher {
 		Configuration conf = HBaseConfiguration.create();
 		
 	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    conf.set("mapreduce.framework.name", "yarn");
+	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    //conf.set("mapreduce.framework.name", "yarn");
 	    
 	    
 	    BufferedImage image = new BufferedImage(300, 600, BufferedImage.TYPE_INT_RGB);
@@ -296,13 +321,18 @@ public class ImageSearcher {
 		boolean isSuccess = job.waitForCompletion(true);
 		
 		if (isSuccess) {
+			Gson gson = new Gson();
+			
 			Get featuresGet = new Get(rowId.getBytes());
 			Result result = table.get(featuresGet);
-			byte[] searchResultBytes = result.getValue(COLUMN_FAMILY, RESULT_COLUMN);
-			String searchResultJson = new String(searchResultBytes);
-			Gson gson = new Gson();
-			List searchResult = gson.fromJson(searchResultJson, List.class);
-			//TODO return list
+			byte[] colorFeatureResultBytes = result.getValue(COLUMN_FAMILY, COLOR_FEATURE_RESULT_COLUMN);
+			String colorFeatureResultJson = new String(colorFeatureResultBytes);
+			SearchResult colorFeatureResult = gson.fromJson(colorFeatureResultJson, SearchResult.class);
+
+			byte[] edgeFeatureResultBytes = result.getValue(COLUMN_FAMILY, EDGE_FEATURE_RESULT_COLUMN);
+			String edgeFeatureResultJson = new String(edgeFeatureResultBytes);
+			SearchResult edgeFeatureResult = gson.fromJson(edgeFeatureResultJson, SearchResult.class);
+			//TODO we got the result
 		}
 		
 	    table.close();

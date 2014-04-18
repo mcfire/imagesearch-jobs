@@ -150,8 +150,8 @@ public class IndexBuilder extends
 		Configuration conf = HBaseConfiguration.create();
 		
 	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    conf.set("mapreduce.framework.name", "yarn");
+	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    //conf.set("mapreduce.framework.name", "yarn");
 	    
 		Job job = configureJob(conf);
 
