@@ -18,8 +18,16 @@
  */
 package edu.buct.glasearch.search.jobs;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.TreeMap;
+
+import javax.imageio.ImageIO;
+
+import net.semanticmetadata.lire.imageanalysis.EdgeHistogram;
+import net.semanticmetadata.lire.imageanalysis.LireFeature;
+import net.semanticmetadata.lire.imageanalysis.SimpleColorHistogram;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -77,9 +85,9 @@ import org.apache.hadoop.util.GenericOptionsParser;
 public class IndexBuilder extends 
 	Mapper<ImmutableBytesWritable, Result, ImmutableBytesWritable, Put> {
 	/** the column family containing the indexed row key */
-	public static final byte[] INDEX_COLUMN = Bytes.toBytes("i");
-	/** the qualifier containing the indexed row key */
-	public static final byte[] INDEX_QUALIFIER = Bytes.toBytes("feature");
+	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
+	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes("color_f");
+	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes("edge_f");
 	
 	private static final String imageTableName = "imageinfo";
 	
@@ -95,10 +103,16 @@ public class IndexBuilder extends
 		String key = new String(rowKey.get());
 		FSDataInputStream file = fs.open(new Path("/imagesearch/images/" + key + ".jpg"));
 		
-		byte[] feature = "test-feature".getBytes();//TODO extract the image feature
+		BufferedImage image = ImageIO.read(file.getWrappedStream());
+		
+		LireFeature colorFeature = new SimpleColorHistogram();
+		colorFeature.extract(image);
+		LireFeature edgeFeature = new EdgeHistogram();
+		edgeFeature.extract(image);
 		
 		Put put = new Put(rowKey.get());
-		put.add(INDEX_COLUMN, INDEX_QUALIFIER, feature);
+		put.add(COLUMN_FAMILY, COLOR_FEATURE_COLUMN, colorFeature.getByteArrayRepresentation());
+		put.add(COLUMN_FAMILY, EDGE_FEATURE_COLUMN, edgeFeature.getByteArrayRepresentation());
 		context.write(tableName, put);
 	}
 

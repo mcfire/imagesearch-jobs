@@ -22,7 +22,12 @@
 		<mapreduce.framework>yarn</mapreduce.framework>
 	</properties>
 
-	<dependencies>
+	<dependencies>		
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+			<version>2.2.4</version>
+		</dependency>
         <dependency>
         	<groupId>com.drew</groupId>
 			<artifactId>metadata-extractor</artifactId>
