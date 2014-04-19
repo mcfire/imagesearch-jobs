@@ -1,21 +1,3 @@
-/**
- *
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
@@ -32,7 +14,6 @@ import net.semanticmetadata.lire.imageanalysis.SimpleColorHistogram;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
@@ -53,38 +34,13 @@ import org.apache.hadoop.mapreduce.Reducer;
 
 import com.google.gson.Gson;
 
-/**
- * Example map/reduce job to construct index tables that can be used to quickly
- * find a row based on the value of a column. It demonstrates:
- * <ul>
- * <li>Using TableInputFormat and TableMapReduceUtil to use an HTable as input
- * to a map/reduce job.</li>
- * <li>Passing values from main method to children via the configuration.</li>
- * <li>Using MultiTableOutputFormat to output to multiple tables from a
- * map/reduce job.</li>
- * <li>A real use case of building a secondary index over a table.</li>
- * </ul>
- * 
- * <h3>Usage</h3>
- * 
- * <p>
- * Modify ${HADOOP_HOME}/conf/hadoop-env.sh to include the hbase jar, the
- * zookeeper jar (can be found in lib/ directory under HBase root, the examples
- * output directory, and the hbase conf directory in HADOOP_CLASSPATH, and then
- * run
- * <tt><strong>bin/hadoop org.apache.hadoop.hbase.mapreduce.IndexBuilder TABLE_NAME COLUMN_FAMILY ATTR [ATTR ...]</strong></tt>
- * </p>
- * 
- * <p>
- * To run with the sample data provided in index-builder-setup.rb, use the
- * arguments <strong><tt>people attributes name email phone</tt></strong>.
- * </p>
- * 
- * <p>
- * This code was written against HBase 0.21 trunk.
- * </p>
- */
-public class ImageSearcher {
+public class ImageSearchJob {
+
+	public static final byte[] TITLE_COLUMN_BYTES = "title".getBytes();
+
+	public static final byte[] LAT_COLUMN_BYTES = "lat".getBytes();
+
+	public static final byte[] LNG_COLUMN_BYTES = "lng".getBytes();
 
 	public static final String COLOR_FEATURE = "color_f";
 	public static final String EDGE_FEATURE = "edge_f";
@@ -98,16 +54,18 @@ public class ImageSearcher {
 	
 	public static final String SEARCH_ROWID = "search_rowid";
 
-	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
+	public static final String COLUMN_FAMILY = "i";
+
+	public static final byte[] COLUMN_FAMILY_BYTES = Bytes.toBytes(COLUMN_FAMILY);
 	
-	private static final String imageInfoTable = "imageinfo";
+	public static final String imageInfoTable = "imageinfo";
 	
-	private static ImmutableBytesWritable imageInfoTableBytes = 
+	public static ImmutableBytesWritable imageInfoTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageInfoTable));
 	
-	private static final String imageResultTable = "imageresult";
+	public static final String imageResultTable = "imageresult";
 	
-	private static ImmutableBytesWritable imageResultTableBytes = 
+	public static ImmutableBytesWritable imageResultTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageResultTable));
 
 	public static class Map extends Mapper<ImmutableBytesWritable, Result, Text, Text> {
@@ -128,8 +86,8 @@ public class ImageSearcher {
 			
 			String rowId = new String(rowKey.get());
 			
-			byte[] targetColorFeatureBytes = result.getValue(COLUMN_FAMILY, COLOR_FEATURE_COLUMN);
-			byte[] targetEdgeFeatureBytes = result.getValue(COLUMN_FAMILY, EDGE_FEATURE_COLUMN);
+			byte[] targetColorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
+			byte[] targetEdgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
 			
 			LireFeature targetColorFeature = new SimpleColorHistogram();
 			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
@@ -158,8 +116,8 @@ public class ImageSearcher {
 			Get featuresGet = new Get(searchRowId.getBytes());
 			Result result = table.get(featuresGet);
 			
-			byte[] colorFeatureBytes = result.getValue(COLUMN_FAMILY, COLOR_FEATURE_COLUMN);
-			byte[] edgeFeatureBytes = result.getValue(COLUMN_FAMILY, EDGE_FEATURE_COLUMN);
+			byte[] colorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
+			byte[] edgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
 			
 			colorFeature = new SimpleColorHistogram();
 			colorFeature.setByteArrayRepresentation(colorFeatureBytes);
@@ -195,11 +153,11 @@ public class ImageSearcher {
 			Collections.sort(features);
 			features = features.subList(0, defaultResultSize);
 			
-			SearchResult resultObject = new SearchResult(features);
+			FeatureList resultObject = new FeatureList(features);
 			String result = gson.toJson(resultObject);
 
 			Put put = new Put(searchRowId.getBytes());
-			put.add(COLUMN_FAMILY, rowKey.toString().getBytes(), result.getBytes());
+			put.add(COLUMN_FAMILY_BYTES, rowKey.toString().getBytes(), result.getBytes());
 			context.write(imageResultTableBytes, put);
 		}
 	
@@ -249,11 +207,13 @@ public class ImageSearcher {
 		}
 	}
 	
-	public static class SearchResult {
+	public static class FeatureList {
 		
 		private List<FeatureObject> result;
+		
+		public FeatureList() {}
 
-		public SearchResult(List<FeatureObject> result) {
+		public FeatureList(List<FeatureObject> result) {
 			super();
 			this.result = result;
 		}
@@ -283,9 +243,9 @@ public class ImageSearcher {
 		jobConf.set(TableInputFormat.SCAN, scanString);
 		jobConf.set(TableInputFormat.INPUT_TABLE, imageInfoTable);
 		Job job = new Job(jobConf);
-		job.setJarByClass(ImageSearcher.class);
-		job.setMapperClass(ImageSearcher.Map.class);
-		job.setReducerClass(ImageSearcher.Reduce.class);
+		job.setJarByClass(ImageSearchJob.class);
+		job.setMapperClass(ImageSearchJob.Map.class);
+		job.setReducerClass(ImageSearchJob.Reduce.class);
 		job.setInputFormatClass(TableInputFormat.class);
 		job.setMapOutputKeyClass(Text.class);
 		job.setOutputFormatClass(MultiTableOutputFormat.class);
@@ -293,7 +253,7 @@ public class ImageSearcher {
 	}
 
 	public static void main(String[] args) throws Exception {
-		Configuration conf = HBaseConfiguration.create();
+		Configuration conf = new Configuration();
 		
 	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
 	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
@@ -310,8 +270,8 @@ public class ImageSearcher {
 
 	    HTable table = new HTable(conf, imageResultTable);
 	    Put featuresPut = new Put(rowId.getBytes());
-	    featuresPut.add(COLUMN_FAMILY, COLOR_FEATURE_COLUMN, colorFeature.getByteArrayRepresentation());
-	    featuresPut.add(COLUMN_FAMILY, EDGE_FEATURE_COLUMN, edgeFeature.getByteArrayRepresentation());
+	    featuresPut.add(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN, colorFeature.getByteArrayRepresentation());
+	    featuresPut.add(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN, edgeFeature.getByteArrayRepresentation());
 	    table.put(featuresPut);
 	    
 	    conf.set(SEARCH_ROWID, rowId);
@@ -325,13 +285,13 @@ public class ImageSearcher {
 			
 			Get featuresGet = new Get(rowId.getBytes());
 			Result result = table.get(featuresGet);
-			byte[] colorFeatureResultBytes = result.getValue(COLUMN_FAMILY, COLOR_FEATURE_RESULT_COLUMN);
+			byte[] colorFeatureResultBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_RESULT_COLUMN);
 			String colorFeatureResultJson = new String(colorFeatureResultBytes);
-			SearchResult colorFeatureResult = gson.fromJson(colorFeatureResultJson, SearchResult.class);
+			FeatureList colorFeatureResult = gson.fromJson(colorFeatureResultJson, FeatureList.class);
 
-			byte[] edgeFeatureResultBytes = result.getValue(COLUMN_FAMILY, EDGE_FEATURE_RESULT_COLUMN);
+			byte[] edgeFeatureResultBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_RESULT_COLUMN);
 			String edgeFeatureResultJson = new String(edgeFeatureResultBytes);
-			SearchResult edgeFeatureResult = gson.fromJson(edgeFeatureResultJson, SearchResult.class);
+			FeatureList edgeFeatureResult = gson.fromJson(edgeFeatureResultJson, FeatureList.class);
 			//TODO we got the result
 		}
 		
