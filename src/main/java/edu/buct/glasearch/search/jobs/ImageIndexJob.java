@@ -31,9 +31,6 @@ public class ImageIndexJob extends
 	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes("edge_f");
 	
 	private static final String imageTableName = "imageinfo";
-	
-	private ImmutableBytesWritable tableName = 
-			new ImmutableBytesWritable(Bytes.toBytes(imageTableName));
 
 	FileSystem fs = null;
 
