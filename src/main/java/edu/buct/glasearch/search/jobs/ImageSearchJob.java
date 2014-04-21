@@ -32,89 +32,74 @@ import com.google.gson.Gson;
 
 public class ImageSearchJob {
 
+	//图像标题的列名
 	public static final byte[] TITLE_COLUMN_BYTES = "title".getBytes();
 
-	public static final byte[] LAT_COLUMN_BYTES = "lat".getBytes();
-
-	public static final byte[] LNG_COLUMN_BYTES = "lng".getBytes();
-
+	//颜色直方图特征的列名
 	public static final String COLOR_FEATURE = "color_f";
+	//边缘直方图特征的列名
 	public static final String EDGE_FEATURE = "edge_f";
 	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes(COLOR_FEATURE);
 	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes(EDGE_FEATURE);
 	
+	//颜色直方图的匹配结果Key
 	public static final String COLOR_FEATURE_RESULT = "color_r";
+	//边缘直方图的匹配结果Key
 	public static final String EDGE_FEATURE_RESULT = "edge_r";
 	public static final byte[] COLOR_FEATURE_RESULT_COLUMN = Bytes.toBytes(COLOR_FEATURE_RESULT);
 	public static final byte[] EDGE_FEATURE_RESULT_COLUMN = Bytes.toBytes(EDGE_FEATURE_RESULT);
 	
+	//检索信息的rowId，检索结果存储于HBase中
 	public static final String SEARCH_ROWID = "search_rowid";
 
+	//HBase列族名
 	public static final String COLUMN_FAMILY = "i";
 
 	public static final byte[] COLUMN_FAMILY_BYTES = Bytes.toBytes(COLUMN_FAMILY);
 	
+	//图像信息表名
 	public static final String imageInfoTable = "imageinfo";
 	
 	public static ImmutableBytesWritable imageInfoTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageInfoTable));
 	
+	//检索配置和结果表名
 	public static final String imageResultTable = "imageresult";
 	
 	public static ImmutableBytesWritable imageResultTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageResultTable));
 
 	public static class Map extends TableMapper<Text, Text> {
-		
+		//文件系统对象，用于访问HDFS上的图像文件
 		FileSystem fs = null;
-		
+		//检索信息的rowId，检索结果存储于HBase中
 		String searchRowId = null;
-		
+		//待检索图像的颜色直方图信息
 		SimpleColorHistogram colorFeature = null;
-		
+		//待检索图像的边缘直方图信息
 		EdgeHistogram edgeFeature = null;
-		
+		//JSON格式转换工具
 		Gson gson = new Gson();
-		
-		@Override
-		protected void map(ImmutableBytesWritable rowKey, Result result,
-				Context context) throws IOException, InterruptedException {
-			
-			String rowId = new String(rowKey.get());
-			
-			byte[] targetColorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
-			byte[] targetEdgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
-			
-			LireFeature targetColorFeature = new SimpleColorHistogram();
-			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
-			float colorDistance = targetColorFeature.getDistance(colorFeature);
-			FeatureObject colorFeatureObject = new FeatureObject(rowId, colorDistance);
-			
-			LireFeature targetEdgeFeature = new EdgeHistogram();
-			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
-			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);
-			FeatureObject edgeFeatureObject = new FeatureObject(rowId, edgeDistance);
-			
-			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
-			context.write(new Text(EDGE_FEATURE_RESULT), new Text(gson.toJson(edgeFeatureObject)));
-		}
 	
 		@Override
 		protected void setup(Context context) throws IOException,
 				InterruptedException {
 			
 			Configuration config = context.getConfiguration();
-			
+			//初始化文件系统对象，连接到Hadoop平台的HDFS上
 			fs = FileSystem.get(config);
 			
+			//接收任务调用者传递的检索信息表rowId
 			searchRowId = config.get(SEARCH_ROWID);
 			HTable table = new HTable(config, imageResultTable);
 			Get featuresGet = new Get(searchRowId.getBytes());
-			Result result = table.get(featuresGet);
+			Result result = table.get(featuresGet);	//根据searchRowId读取检索信息
 			
+			//读取待检索图像的颜色直方图特征和边缘直方图特征
 			byte[] colorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
 			byte[] edgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
 			
+			//将两类特征封装为对象形式
 			colorFeature = new SimpleColorHistogram();
 			colorFeature.setByteArrayRepresentation(colorFeatureBytes);
 			
@@ -123,22 +108,57 @@ public class ImageSearchJob {
 			
 			table.close();
 		}
+		
+		@Override
+		protected void map(ImmutableBytesWritable rowKey, Result result,
+				Context context) throws IOException, InterruptedException {
+			//图像信息表中当前行的rowId
+			String rowId = new String(rowKey.get());
+			
+			//读取目标图像的两类直方图特征
+			byte[] targetColorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
+			byte[] targetEdgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
+			
+			//将两类直方图特征以对象的形式表示，并计算和待检索图像特征之间的距离
+			LireFeature targetColorFeature = new SimpleColorHistogram();
+			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
+			float colorDistance = targetColorFeature.getDistance(colorFeature);//计算和待检索图像特征之间的距离
+			FeatureObject colorFeatureObject = new FeatureObject(rowId, colorDistance);//生成结果对象
+			
+			LireFeature targetEdgeFeature = new EdgeHistogram();
+			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
+			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);//计算和待检索图像特征之间的距离
+			FeatureObject edgeFeatureObject = new FeatureObject(rowId, edgeDistance);//生成距离对象
+			
+			//以JSON的格式将特征距离对象写入到Map的输入。输出按照特征类型分类
+			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
+			context.write(new Text(EDGE_FEATURE_RESULT), new Text(gson.toJson(edgeFeatureObject)));
+		}
 	}
 
 	public static class Reduce extends TableReducer<Text, Text, ImmutableBytesWritable> {
-		
+		//默认检索结果数量
 		int defaultResultSize = 10;
-		
+		//检索信息的rowId，检索结果存储于HBase中
 		String searchRowId = null;
-		
+		//JSON格式转换工具
 		Gson gson = new Gson();
+	
+		@Override
+		protected void setup(Context context) throws IOException,
+				InterruptedException {
+			//读取任务调用方传递的检索参数
+			Configuration config = context.getConfiguration();
+			searchRowId = config.get(SEARCH_ROWID);
+			defaultResultSize = config.getInt("defaultResultSize", defaultResultSize);
+		}
 		
 		@Override
 		protected void reduce(Text rowKey, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
 			
 			List<FeatureObject> features = new LinkedList<FeatureObject>();
-			
+			//将距离对象进行JSON格式转换
 			Iterator<Text> itor = values.iterator();
 			while (itor.hasNext()) {
 				String json = itor.next().toString();
@@ -146,24 +166,20 @@ public class ImageSearchJob {
 				features.add(feature);				
 			}
 			
+			//对结果进行按照距离排序
 			Collections.sort(features);
-			features = features.subList(0, defaultResultSize);
-			
+			//取指定数量的结果
+			if (defaultResultSize < features.size()) {
+				features = features.subList(0, defaultResultSize);
+			}
+			//将结果转换为JSON格式
 			FeatureList resultObject = new FeatureList(features);
 			String result = gson.toJson(resultObject);
-
+			
+			//将结果写入输出，Reduce操作完成后将写入HBase数据库
 			Put put = new Put(searchRowId.getBytes());
 			put.add(COLUMN_FAMILY_BYTES, rowKey.toString().getBytes(), result.getBytes());
 			context.write(null, put);
-		}
-	
-		@Override
-		protected void setup(Context context) throws IOException,
-				InterruptedException {
-			
-			Configuration config = context.getConfiguration();
-			searchRowId = config.get(SEARCH_ROWID);
-			defaultResultSize = config.getInt("defaultResultSize", defaultResultSize);
 		}
 	}
 	

@@ -25,41 +25,51 @@ import org.apache.hadoop.mapreduce.Job;
 
 public class ImageIndexJob extends 
 	TableMapper<ImmutableBytesWritable, Put> {
-	/** the column family containing the indexed row key */
+	//hbase的列族
 	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
+	//颜色直方图特征的列名
 	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes("color_f");
+	//边缘直方图特征的列名
 	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes("edge_f");
 	
+	//图像信息表名称
 	private static final String imageTableName = "imageinfo";
-	
-	private ImmutableBytesWritable tableName = 
-			new ImmutableBytesWritable(Bytes.toBytes(imageTableName));
 
+	//文件系统对象，用于访问HDFS上的图像文件
 	FileSystem fs = null;
 
+	//支持HBase操作的map函数
 	@Override
 	protected void map(ImmutableBytesWritable rowKey, Result result,
 			Context context) throws IOException, InterruptedException {
-
+		//rowKey为HBase的列ID
 		String key = new String(rowKey.get());
+		//根据列ID打开图像文件
 		FSDataInputStream file = fs.open(new Path("/imagesearch/images/" + key + ".jpg"));
 		
+		//将图像文件读取为图像对象
 		BufferedImage image = ImageIO.read(file.getWrappedStream());
 		
+		//提取颜色直方图特征
 		LireFeature colorFeature = new SimpleColorHistogram();
 		colorFeature.extract(image);
+		//提取边缘直方图特征
 		LireFeature edgeFeature = new EdgeHistogram();
 		edgeFeature.extract(image);
 		
+		//将颜色直方图特征和边缘直方图特征的二进制表示放入HBase表中。
+		//Map任务结束后将会把数据插入到HBase中，特征提取任务完成。
 		Put put = new Put(rowKey.get());
 		put.add(COLUMN_FAMILY, COLOR_FEATURE_COLUMN, colorFeature.getByteArrayRepresentation());
 		put.add(COLUMN_FAMILY, EDGE_FEATURE_COLUMN, edgeFeature.getByteArrayRepresentation());
 		context.write(rowKey, put);
 	}
 
+	//此函数将在map任务执行之前执行，用于进行初始化操作
 	@Override
 	protected void setup(Context context) throws IOException,
 			InterruptedException {
+		//初始化文件系统对象，连接到Hadoop平台的HDFS上
 		Configuration config = context.getConfiguration();
 		fs = FileSystem.get(config);
 	}
