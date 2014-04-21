@@ -20,17 +20,13 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.MultiTableOutputFormat;
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
-import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
-import org.apache.hadoop.hbase.util.Base64;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.mapreduce.TableMapper;
+import org.apache.hadoop.hbase.mapreduce.TableReducer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
 
 import com.google.gson.Gson;
 
@@ -68,7 +64,7 @@ public class ImageSearchJob {
 	public static ImmutableBytesWritable imageResultTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageResultTable));
 
-	public static class Map extends Mapper<ImmutableBytesWritable, Result, Text, Text> {
+	public static class Map extends TableMapper<Text, Text> {
 		
 		FileSystem fs = null;
 		
@@ -129,7 +125,7 @@ public class ImageSearchJob {
 		}
 	}
 
-	public static class Reduce extends Reducer<Text, Text, ImmutableBytesWritable, Put> {
+	public static class Reduce extends TableReducer<Text, Text, ImmutableBytesWritable> {
 		
 		int defaultResultSize = 10;
 		
@@ -158,7 +154,7 @@ public class ImageSearchJob {
 
 			Put put = new Put(searchRowId.getBytes());
 			put.add(COLUMN_FAMILY_BYTES, rowKey.toString().getBytes(), result.getBytes());
-			context.write(imageResultTableBytes, put);
+			context.write(null, put);
 		}
 	
 		@Override
@@ -234,21 +230,34 @@ public class ImageSearchJob {
 	public static Job configureJob(Configuration conf)
 			throws IOException {
 
-		ClientProtos.Scan proto = ProtobufUtil.toScan(new Scan());
-		String scanString = Base64.encodeBytes(proto.toByteArray());
-
+		//important: use this method to add job and it's dependency jar
+		TableMapReduceUtil.addDependencyJars(conf, ImageSearchJob.class, LireFeature.class, Gson.class);
+		
 		JobConf jobConf = new JobConf(conf);
 		jobConf.setJobName("image-search");
 		
-		jobConf.set(TableInputFormat.SCAN, scanString);
-		jobConf.set(TableInputFormat.INPUT_TABLE, imageInfoTable);
 		Job job = new Job(jobConf);
-		job.setJarByClass(ImageSearchJob.class);
-		job.setMapperClass(ImageSearchJob.Map.class);
-		job.setReducerClass(ImageSearchJob.Reduce.class);
-		job.setInputFormatClass(TableInputFormat.class);
-		job.setMapOutputKeyClass(Text.class);
-		job.setOutputFormatClass(MultiTableOutputFormat.class);
+		job.setJarByClass(ImageIndexJob.class);
+		
+		Scan scan = new Scan();
+		scan.setCaching(500);        // 1 is the default in Scan, which will be bad for MapReduce jobs
+		scan.setCacheBlocks(false);  // don't set to true for MR jobs
+		// set other scan attrs
+		
+		TableMapReduceUtil.initTableMapperJob(
+				imageInfoTable,        // input table
+				scan,               // Scan instance to control CF and attribute selection
+				Map.class,     // mapper class
+				Text.class,         // mapper output key
+				Text.class,  // mapper output value
+				job);
+		
+		TableMapReduceUtil.initTableReducerJob(
+				imageResultTable,      // output table
+				Reduce.class,             // reducer class
+				job);
+		job.setNumReduceTasks(1);
+		
 		return job;
 	}
 
@@ -256,8 +265,8 @@ public class ImageSearchJob {
 		Configuration conf = new Configuration();
 		
 	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    //conf.set("mapreduce.framework.name", "yarn");
+	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    conf.set("mapreduce.framework.name", "yarn");
 	    
 	    
 	    BufferedImage image = new BufferedImage(300, 600, BufferedImage.TYPE_INT_RGB);

@@ -15,16 +15,16 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.MultiTableOutputFormat;
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.mapreduce.TableMapper;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
 
 public class ImageIndexJob extends 
-	Mapper<ImmutableBytesWritable, Result, ImmutableBytesWritable, Put> {
+	TableMapper<ImmutableBytesWritable, Put> {
 	/** the column family containing the indexed row key */
 	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
 	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes("color_f");
@@ -54,7 +54,7 @@ public class ImageIndexJob extends
 		Put put = new Put(rowKey.get());
 		put.add(COLUMN_FAMILY, COLOR_FEATURE_COLUMN, colorFeature.getByteArrayRepresentation());
 		put.add(COLUMN_FAMILY, EDGE_FEATURE_COLUMN, edgeFeature.getByteArrayRepresentation());
-		context.write(tableName, put);
+		context.write(rowKey, put);
 	}
 
 	@Override
@@ -70,16 +70,33 @@ public class ImageIndexJob extends
 	public static Job configureJob(Configuration conf)
 			throws IOException {
 
+		TableMapReduceUtil.addDependencyJars(conf, ImageIndexJob.class, LireFeature.class);
+		
 		JobConf jobConf = new JobConf(conf);
 		jobConf.setJobName("image-index");
 		
-		jobConf.set(TableInputFormat.INPUT_TABLE, imageTableName);
 		Job job = new Job(jobConf);
 		job.setJarByClass(ImageIndexJob.class);
-		job.setMapperClass(ImageIndexJob.class);
+		
+		Scan scan = new Scan();
+		scan.setCaching(500);        // 1 is the default in Scan, which will be bad for MapReduce jobs
+		scan.setCacheBlocks(false);  // don't set to true for MR jobs
+		// set other scan attrs
+		
+		TableMapReduceUtil.initTableMapperJob(
+				imageTableName,        // input table
+				scan,               // Scan instance to control CF and attribute selection
+				ImageIndexJob.class,     // mapper class
+				null,         // mapper output key
+				null,  // mapper output value
+				job);
+		
+		TableMapReduceUtil.initTableReducerJob(
+				imageTableName,      // output table
+				null,             // reducer class
+				job);
 		job.setNumReduceTasks(0);
-		job.setInputFormatClass(TableInputFormat.class);
-		job.setOutputFormatClass(MultiTableOutputFormat.class);
+		
 		return job;
 	}
 
@@ -87,8 +104,8 @@ public class ImageIndexJob extends
 		Configuration conf = new Configuration();
 		
 	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    //conf.set("mapreduce.framework.name", "yarn");
+	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    conf.set("mapreduce.framework.name", "yarn");
 	    
 		Job job = configureJob(conf);
 
