@@ -34,6 +34,10 @@ public class ImageSearchJob {
 
 	//图像标题的列名
 	public static final byte[] TITLE_COLUMN_BYTES = "title".getBytes();
+	
+	public static final byte[] LAT_COLUMN_BYTES = "lat".getBytes();
+
+	public static final byte[] LNG_COLUMN_BYTES = "lng".getBytes();
 
 	//颜色直方图特征的列名
 	public static final String COLOR_FEATURE = "color_f";
