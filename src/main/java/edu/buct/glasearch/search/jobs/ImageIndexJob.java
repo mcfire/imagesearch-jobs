@@ -2,6 +2,7 @@ package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.Date;
 
 import javax.imageio.ImageIO;
 
@@ -9,6 +10,8 @@ import net.semanticmetadata.lire.imageanalysis.EdgeHistogram;
 import net.semanticmetadata.lire.imageanalysis.LireFeature;
 import net.semanticmetadata.lire.imageanalysis.SimpleColorHistogram;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -25,12 +28,18 @@ import org.apache.hadoop.mapreduce.Job;
 
 public class ImageIndexJob extends 
 	TableMapper<ImmutableBytesWritable, Put> {
+	
+	private static final Log logger = LogFactory.getLog(ImageIndexJob.class);
+	//存放图片的文件地址
+	private static final String IMAGES_LOCATION = "/root/development/data/";
 	//hbase的列族
 	public static final byte[] COLUMN_FAMILY = Bytes.toBytes("i");
 	//颜色直方图特征的列名
 	public static final byte[] COLOR_FEATURE_COLUMN = Bytes.toBytes("color_f");
 	//边缘直方图特征的列名
 	public static final byte[] EDGE_FEATURE_COLUMN = Bytes.toBytes("edge_f");
+	//图像文件名的列名
+	public static final byte[] FILE_NAME_COLUMN = Bytes.toBytes("image");
 	
 	//图像信息表名称
 	private static final String imageTableName = "imageinfo";
@@ -41,14 +50,27 @@ public class ImageIndexJob extends
 	//支持HBase操作的map函数
 	@Override
 	protected void map(ImmutableBytesWritable rowKey, Result result,
-			Context context) throws IOException, InterruptedException {
+			Context context) throws InterruptedException, IOException {
 		//rowKey为HBase的列ID
-		String key = new String(rowKey.get());
-		//根据列ID打开图像文件
-		FSDataInputStream file = fs.open(new Path("/imagesearch/images/" + key + ".jpg"));
+		String rowId = new String(rowKey.get());
 		
-		//将图像文件读取为图像对象
-		BufferedImage image = ImageIO.read(file.getWrappedStream());
+		logger.info("index image, rowId:" + rowId);
+		
+		//根据列ID打开图像文件
+		BufferedImage image = null;
+		try {
+			byte[] fileNameBytes = result.getValue(COLUMN_FAMILY, FILE_NAME_COLUMN);
+			if (fileNameBytes == null) return;
+			
+			String fileName = new String(fileNameBytes);
+			FSDataInputStream file = fs.open(new Path(IMAGES_LOCATION + fileName));
+			
+			//将图像文件读取为图像对象
+			image = ImageIO.read(file.getWrappedStream());
+		} catch (IOException e) {
+			logger.error("open image error, rowId:" + rowId);
+		}
+		if (image == null) return;
 		
 		//提取颜色直方图特征
 		LireFeature colorFeature = new SimpleColorHistogram();
@@ -112,14 +134,18 @@ public class ImageIndexJob extends
 
 	public static void main(String[] args) throws Exception {
 		Configuration conf = new Configuration();
-		
-	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    conf.set("mapreduce.framework.name", "yarn");
+
+		//FIXME use local fs for debug usage. 
+	    //conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
+	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    //conf.set("mapreduce.framework.name", "yarn");
+	    Date startTime = new Date();
 	    
 		Job job = configureJob(conf);
 
 		int result = job.waitForCompletion(true) ? 0 : 1;
+		
+		logger.info("Time used(million second):" + (new Date().getTime() - startTime.getTime()));
 		System.exit(result);
 	}
 }
