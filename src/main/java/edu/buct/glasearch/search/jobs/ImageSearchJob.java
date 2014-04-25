@@ -1,6 +1,7 @@
 package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Iterator;
@@ -8,10 +9,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 
+import javax.imageio.ImageIO;
+
 import net.semanticmetadata.lire.imageanalysis.EdgeHistogram;
 import net.semanticmetadata.lire.imageanalysis.LireFeature;
 import net.semanticmetadata.lire.imageanalysis.SimpleColorHistogram;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.client.Get;
@@ -19,10 +24,15 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.PrefixFilter;
+import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableMapper;
 import org.apache.hadoop.hbase.mapreduce.TableReducer;
+import org.apache.hadoop.hbase.protobuf.generated.FilterProtos.CompareFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
@@ -32,8 +42,12 @@ import com.google.gson.Gson;
 
 public class ImageSearchJob {
 
+	private static final Log logger = LogFactory.getLog(ImageSearchJob.class);
+	
 	//图像标题的列名
 	public static final byte[] TITLE_COLUMN_BYTES = "title".getBytes();
+	
+	public static final byte[] FILENAME_COLUMN_BYTES = "image".getBytes();
 	
 	public static final byte[] LAT_COLUMN_BYTES = "lat".getBytes();
 
@@ -119,9 +133,17 @@ public class ImageSearchJob {
 			//图像信息表中当前行的rowId
 			String rowId = new String(rowKey.get());
 			
+			if (logger.isInfoEnabled()) {
+				logger.info("map operation on:" + rowId);
+			}
+			
 			//读取目标图像的两类直方图特征
 			byte[] targetColorFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, COLOR_FEATURE_COLUMN);
 			byte[] targetEdgeFeatureBytes = result.getValue(COLUMN_FAMILY_BYTES, EDGE_FEATURE_COLUMN);
+			if (targetColorFeatureBytes == null || targetEdgeFeatureBytes == null) {
+				logger.error("some feature is null");
+				return;
+			}
 			
 			//将两类直方图特征以对象的形式表示，并计算和待检索图像特征之间的距离
 			LireFeature targetColorFeature = new SimpleColorHistogram();
@@ -142,7 +164,7 @@ public class ImageSearchJob {
 
 	public static class Reduce extends TableReducer<Text, Text, ImmutableBytesWritable> {
 		//默认检索结果数量
-		int defaultResultSize = 10;
+		int resultSize = 10;
 		//检索信息的rowId，检索结果存储于HBase中
 		String searchRowId = null;
 		//JSON格式转换工具
@@ -154,7 +176,7 @@ public class ImageSearchJob {
 			//读取任务调用方传递的检索参数
 			Configuration config = context.getConfiguration();
 			searchRowId = config.get(SEARCH_ROWID);
-			defaultResultSize = config.getInt("defaultResultSize", defaultResultSize);
+			resultSize = config.getInt("resultSize", resultSize);
 		}
 		
 		@Override
@@ -173,8 +195,8 @@ public class ImageSearchJob {
 			//对结果进行按照距离排序
 			Collections.sort(features);
 			//取指定数量的结果
-			if (defaultResultSize < features.size()) {
-				features = features.subList(0, defaultResultSize);
+			if (resultSize < features.size()) {
+				features = features.subList(0, resultSize);
 			}
 			//将结果转换为JSON格式
 			FeatureList resultObject = new FeatureList(features);
@@ -247,7 +269,7 @@ public class ImageSearchJob {
 	/**
 	 * Job configuration.
 	 */
-	public static Job configureJob(Configuration conf)
+	public static Job configureJob(Configuration conf, byte[] startRow, byte[] stopRow)
 			throws IOException {
 
 		//important: use this method to add job and it's dependency jar
@@ -262,6 +284,8 @@ public class ImageSearchJob {
 		Scan scan = new Scan();
 		scan.setCaching(500);        // 1 is the default in Scan, which will be bad for MapReduce jobs
 		scan.setCacheBlocks(false);  // don't set to true for MR jobs
+		scan.setStartRow(startRow);
+		scan.setStopRow(stopRow);
 		// set other scan attrs
 		
 		TableMapReduceUtil.initTableMapperJob(
@@ -283,13 +307,14 @@ public class ImageSearchJob {
 
 	public static void main(String[] args) throws Exception {
 		Configuration conf = new Configuration();
-		
-	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    conf.set("mapreduce.framework.name", "yarn");
+	    //conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
+	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    //conf.set("mapreduce.framework.name", "yarn");39115,39105,39142
+	    String imageFileName = "/root/development/data/images/39/39115.jpg";
+		String START_ROW = "39";
+		String STOP_ROW = "39-393300";
 	    
-	    
-	    BufferedImage image = new BufferedImage(300, 600, BufferedImage.TYPE_INT_RGB);
+	    BufferedImage image = ImageIO.read(new FileInputStream(imageFileName));
 		LireFeature colorFeature = new SimpleColorHistogram();
 		colorFeature.extract(image);
 		LireFeature edgeFeature = new EdgeHistogram();
@@ -305,7 +330,7 @@ public class ImageSearchJob {
 	    
 	    conf.set(SEARCH_ROWID, rowId);
 	    
-		Job job = configureJob(conf);
+		Job job = configureJob(conf, Bytes.toBytes(START_ROW),  Bytes.toBytes(STOP_ROW));
 
 		boolean isSuccess = job.waitForCompletion(true);
 		

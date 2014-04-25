@@ -35,7 +35,7 @@ public class ImportAnnotationData {
 	private static Log logger = LogFactory.getLog(ImportAnnotationData.class);
 	
 	private static final String HBASE_LOCATION = "hdfs://cluster1.centos:8020";
-	private static final String dataLocation = "E:/iaprtc12/annotations_complete_eng";
+	private static final String dataLocation = "/root/development/data/annotations_complete_eng";
 	
 	public void setFileEncoding() throws IOException {
 		
@@ -80,11 +80,15 @@ public class ImportAnnotationData {
         int errorCounter = 0;
         for (File subDir : dir.listFiles()) {
         	for (File image : subDir.listFiles()) {
-
-        		String rowId = subDir.getName() + "-" + 
-        				image.getName().substring(0, image.getName().indexOf('.'));
+        		
+        		String imageId = image.getName().substring(0, image.getName().indexOf('.'));
+        		String rowId = subDir.getName() + "-" + imageId;
         		
                 Put put = new Put(Bytes.toBytes(rowId));
+                put.add(ImageSearchJob.COLUMN_FAMILY_BYTES, 
+                		Bytes.toBytes("category"), Bytes.toBytes(subDir.getName()));
+                put.add(ImageSearchJob.COLUMN_FAMILY_BYTES, 
+                		Bytes.toBytes("imageid"), Bytes.toBytes(imageId));
                 
                 XMLTag doc = null;
                 try {
