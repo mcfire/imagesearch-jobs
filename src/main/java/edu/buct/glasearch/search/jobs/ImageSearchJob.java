@@ -101,6 +101,8 @@ public class ImageSearchJob {
 		EdgeHistogram edgeFeature = null;
 		//JSON格式转换工具
 		Gson gson = new Gson();
+		
+		double colorAvg, colorSigma, edgeAvg, edgeSigma;
 	
 		@Override
 		protected void setup(Context context) throws IOException,
@@ -128,6 +130,20 @@ public class ImageSearchJob {
 			edgeFeature.setByteArrayRepresentation(edgeFeatureBytes);
 			
 			table.close();
+			
+			//从距离信息表中提取图像间距离的平均值和方差，用于距离的归一化。
+			HTable distanceTable = new HTable(config, imageDistanceTable);
+			Get colorDistanceGet = new Get(COLOR_FEATURE_RESULT_COLUMN);
+			Result colorDistance = distanceTable.get(colorDistanceGet);
+			colorAvg = Bytes.toDouble(colorDistance.getValue(COLUMN_FAMILY_BYTES, Bytes.toBytes("avg")));
+			colorSigma = Bytes.toDouble(colorDistance.getValue(COLUMN_FAMILY_BYTES, Bytes.toBytes("sigma")));
+			
+			Get edgeDistanceGet = new Get(EDGE_FEATURE_RESULT_COLUMN);
+			Result edgeDistance = distanceTable.get(edgeDistanceGet);
+			edgeAvg = Bytes.toDouble(edgeDistance.getValue(COLUMN_FAMILY_BYTES, Bytes.toBytes("avg")));
+			edgeSigma = Bytes.toDouble(edgeDistance.getValue(COLUMN_FAMILY_BYTES, Bytes.toBytes("sigma")));
+			
+			distanceTable.close();
 		}
 		
 		@Override
@@ -152,12 +168,14 @@ public class ImageSearchJob {
 			LireFeature targetColorFeature = new SimpleColorHistogram();
 			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
 			float colorDistance = targetColorFeature.getDistance(colorFeature);//计算和待检索图像特征之间的距离
-			FeatureObject colorFeatureObject = new FeatureObject(rowId, colorDistance);//生成结果对象
+			double flatColorDistance = Math.abs(colorDistance - colorAvg) / colorSigma;//距离归一化
+			FeatureObject colorFeatureObject = new FeatureObject(rowId, (float)flatColorDistance);//生成结果对象
 			
 			LireFeature targetEdgeFeature = new EdgeHistogram();
 			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
 			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);//计算和待检索图像特征之间的距离
-			FeatureObject edgeFeatureObject = new FeatureObject(rowId, edgeDistance);//生成距离对象
+			double flatEdgeDistance = Math.abs(edgeDistance - edgeAvg) / edgeSigma;	//距离归一化
+			FeatureObject edgeFeatureObject = new FeatureObject(rowId, (float)flatEdgeDistance);//生成距离对象
 			
 			//以JSON的格式将特征距离对象写入到Map的输入。输出按照特征类型分类
 			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
