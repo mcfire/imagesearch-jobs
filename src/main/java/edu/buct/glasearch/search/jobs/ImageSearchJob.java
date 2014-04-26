@@ -264,6 +264,12 @@ public class ImageSearchJob {
 			
 			return this.distance > o.distance ? 1 : (this.distance == o.distance ? 0 : -1);
 		}
+		
+		@Override
+		public boolean equals(Object o) {
+			if (this.rowId == null || o == null || !(o instanceof FeatureObject)) return false;
+			return this.rowId.equals(((FeatureObject)o).rowId);
+		}
 	}
 	
 	public static class FeatureList {
