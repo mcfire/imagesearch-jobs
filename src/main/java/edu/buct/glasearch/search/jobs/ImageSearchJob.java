@@ -86,6 +86,9 @@ public class ImageSearchJob {
 	
 	public static ImmutableBytesWritable imageResultTableBytes = 
 			new ImmutableBytesWritable(Bytes.toBytes(imageResultTable));
+	
+	//检索配置和结果表名
+	public static final String imageDistanceTable = "imagedistance";
 
 	public static class Map extends TableMapper<Text, Text> {
 		//文件系统对象，用于访问HDFS上的图像文件
