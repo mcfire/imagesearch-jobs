@@ -168,13 +168,13 @@ public class ImageSearchJob {
 			LireFeature targetColorFeature = new SimpleColorHistogram();
 			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
 			float colorDistance = targetColorFeature.getDistance(colorFeature);//计算和待检索图像特征之间的距离
-			double flatColorDistance = Math.abs(colorDistance - colorAvg) / colorSigma;//距离归一化
+			double flatColorDistance = (colorDistance - colorAvg) / colorSigma;//距离归一化
 			FeatureObject colorFeatureObject = new FeatureObject(rowId, (float)flatColorDistance);//生成结果对象
 			
 			LireFeature targetEdgeFeature = new EdgeHistogram();
 			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
 			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);//计算和待检索图像特征之间的距离
-			double flatEdgeDistance = Math.abs(edgeDistance - edgeAvg) / edgeSigma;	//距离归一化
+			double flatEdgeDistance = (edgeDistance - edgeAvg) / edgeSigma;	//距离归一化
 			FeatureObject edgeFeatureObject = new FeatureObject(rowId, (float)flatEdgeDistance);//生成距离对象
 			
 			//以JSON的格式将特征距离对象写入到Map的输入。输出按照特征类型分类
