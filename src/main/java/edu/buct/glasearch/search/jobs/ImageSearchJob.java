@@ -3,6 +3,7 @@ package edu.buct.glasearch.search.jobs;
 import java.awt.image.BufferedImage;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -227,7 +228,7 @@ public class ImageSearchJob {
 		}
 	}
 	
-	public static class FeatureObject implements Comparable<FeatureObject> {
+	public static class FeatureObject implements Comparable<FeatureObject>, Serializable {
 		
 		public enum FeatureType {
 			color,

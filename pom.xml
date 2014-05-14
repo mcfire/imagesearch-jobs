@@ -19,6 +19,9 @@
 		<spring.hadoop.version>1.0.2.RELEASE-hadoop22</spring.hadoop.version>
 		<hadoop.version>2.2.0</hadoop.version>
     	<thrift.version>0.9.0</thrift.version>
+		<commons-lang.version>2.3</commons-lang.version>
+		<commons-lang3.version>3.1</commons-lang3.version>
+		<commons-io.version>1.3.2</commons-io.version>
 		<mapreduce.framework>yarn</mapreduce.framework>
 	</properties>
 
@@ -153,6 +156,27 @@
 			<artifactId>spring-aop</artifactId>
 			<version>${spring.version}</version>
 		</dependency>
+
+		<!-- GENERAL UTILS begin -->
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<version>${commons-lang.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>${commons-lang3.version}</version>
+		</dependency>
+	 
+		<!-- Apache Commons Upload --> 
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>${commons-io.version}</version>
+		</dependency>
+		
+		<!-- GENERAL UTILS end -->
 
 		<!-- Logging -->
 		<dependency>
