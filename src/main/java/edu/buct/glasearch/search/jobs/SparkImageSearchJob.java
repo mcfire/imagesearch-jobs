@@ -3,6 +3,7 @@ package edu.buct.glasearch.search.jobs;
 import java.awt.image.BufferedImage;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -19,23 +20,28 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CompatibilityFactory;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.mapreduce.JobUtil;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
-import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
-import org.apache.hadoop.hbase.util.Base64;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
+import org.apache.hadoop.hbase.thrift2.ThriftServer;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.vint.UVLongTool;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 
-import scala.Serializable;
+import com.google.protobuf.HBaseZeroCopyByteString;
+import com.google.protobuf.LazyStringArrayList;
+
 import scala.Tuple2;
 import edu.buct.glasearch.search.jobs.ImageSearchJob.FeatureObject;
 
@@ -124,11 +130,6 @@ public class SparkImageSearchJob implements Serializable {
 			list.add(element);
 		}
 	}
-	
-	static String convertScanToString(Scan scan) throws IOException {
-		ClientProtos.Scan proto = ProtobufUtil.toScan(scan);
-		return Base64.encodeBytes(proto.toByteArray());
-	}
 
 	public static void main(String[] args) throws IOException, InterruptedException {
 		
@@ -136,15 +137,25 @@ public class SparkImageSearchJob implements Serializable {
 		String masterAddress = "spark://cluster1.centos:7077";
 		
 		Set<String> jars = new HashSet<String>();
-		
-		addToList(JavaSparkContext.jarOfClass(EdgeHistogram.class), jars);
+
 		addToList(JavaSparkContext.jarOfClass(SparkImageSearchJob.class), jars);
+		addToList(JavaSparkContext.jarOfClass(SimpleColorHistogram.class), jars);
+
 		addToList(JavaSparkContext.jarOfClass(StringUtils.class), jars);
 		addToList(JavaSparkContext.jarOfClass(LogFactory.class), jars);
 		addToList(JavaSparkContext.jarOfClass(Configuration.class), jars);
 		addToList(JavaSparkContext.jarOfClass(HTable.class), jars);
 		addToList(JavaSparkContext.jarOfClass(TableInputFormat.class), jars);
-		addToList(JavaSparkContext.jarOfClass(ProtobufUtil.class), jars);
+		addToList(JavaSparkContext.jarOfClass(HBaseConfiguration.class), jars);
+		addToList(JavaSparkContext.jarOfClass(HBaseProtos.class), jars);
+		addToList(JavaSparkContext.jarOfClass(JobUtil.class), jars);
+		addToList(JavaSparkContext.jarOfClass(CompatibilityFactory.class), jars);
+		addToList(JavaSparkContext.jarOfClass(UVLongTool.class), jars);
+		addToList(JavaSparkContext.jarOfClass(ThriftServer.class), jars);
+		addToList(JavaSparkContext.jarOfClass(org.cloudera.htrace.Trace.class), jars);
+		
+		addToList(JavaSparkContext.jarOfClass(HBaseZeroCopyByteString.class), jars);
+		addToList(JavaSparkContext.jarOfClass(LazyStringArrayList.class), jars);
 
 //		String classPath = "";
 //		File libs = new File(classPath);
@@ -171,7 +182,6 @@ public class SparkImageSearchJob implements Serializable {
 		scan.setCacheBlocks(false);  // don't set to true for MR jobs
 		
 		jobConf.set(TableInputFormat.INPUT_TABLE, ImageSearchJob.imageInfoTable);
-		jobConf.set(TableInputFormat.SCAN, convertScanToString(scan));
 		// read data
 		JavaPairRDD<ImmutableBytesWritable, Result> hbaseData = ctx.newAPIHadoopRDD(jobConf, 
 				TableInputFormat.class, 
