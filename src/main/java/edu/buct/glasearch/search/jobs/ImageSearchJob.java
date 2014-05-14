@@ -24,15 +24,10 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.PrefixFilter;
-import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableMapper;
 import org.apache.hadoop.hbase.mapreduce.TableReducer;
-import org.apache.hadoop.hbase.protobuf.generated.FilterProtos.CompareFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
@@ -169,13 +164,15 @@ public class ImageSearchJob {
 			targetColorFeature.setByteArrayRepresentation(targetColorFeatureBytes);
 			float colorDistance = targetColorFeature.getDistance(colorFeature);//计算和待检索图像特征之间的距离
 			double flatColorDistance = (colorDistance - colorAvg) / colorSigma;//距离归一化
-			FeatureObject colorFeatureObject = new FeatureObject(rowId, (float)flatColorDistance);//生成结果对象
+			FeatureObject colorFeatureObject = new FeatureObject(
+					rowId, (float)flatColorDistance, FeatureObject.FeatureType.color);//生成结果对象
 			
 			LireFeature targetEdgeFeature = new EdgeHistogram();
 			targetEdgeFeature.setByteArrayRepresentation(targetEdgeFeatureBytes);
 			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);//计算和待检索图像特征之间的距离
 			double flatEdgeDistance = (edgeDistance - edgeAvg) / edgeSigma;	//距离归一化
-			FeatureObject edgeFeatureObject = new FeatureObject(rowId, (float)flatEdgeDistance);//生成距离对象
+			FeatureObject edgeFeatureObject = new FeatureObject(
+					rowId, (float)flatEdgeDistance, FeatureObject.FeatureType.color);//生成距离对象
 			
 			//以JSON的格式将特征距离对象写入到Map的输入。输出按照特征类型分类
 			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
@@ -232,14 +229,30 @@ public class ImageSearchJob {
 	
 	public static class FeatureObject implements Comparable<FeatureObject> {
 		
+		public enum FeatureType {
+			color,
+			edge
+		}
+		
 		private String rowId;
 
 		private float distance;
+		
+		private FeatureType type;
 
-		public FeatureObject(String rowId, float distance) {
+		public FeatureType getType() {
+			return type;
+		}
+
+		public void setType(FeatureType type) {
+			this.type = type;
+		}
+
+		public FeatureObject(String rowId, float distance, FeatureType type) {
 			super();
 			this.rowId = rowId;
 			this.distance = distance;
+			this.type = type;
 		}
 
 		public String getRowId() {
@@ -262,6 +275,9 @@ public class ImageSearchJob {
 		public int compareTo(FeatureObject o) {
 			if (o == null) return 1;
 			
+			if (this.type.ordinal() != o.type.ordinal()) {
+				return new Integer(this.type.ordinal()).compareTo(o.type.ordinal());
+			}
 			return this.distance > o.distance ? 1 : (this.distance == o.distance ? 0 : -1);
 		}
 		
@@ -336,7 +352,7 @@ public class ImageSearchJob {
 		Configuration conf = new Configuration();
 	    //conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
 	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    //conf.set("mapreduce.framework.name", "yarn");39115,39105,39142
+	    //conf.set("mapreduce.framework.name", "yarn");
 	    String imageFileName = "/root/development/data/images/39/39115.jpg";
 		String START_ROW = "39";
 		String STOP_ROW = "39-393300";

@@ -148,4 +148,5 @@ public class ImageIndexJob extends
 		logger.info("Time used(million second):" + (new Date().getTime() - startTime.getTime()));
 		System.exit(result);
 	}
+	
 }
