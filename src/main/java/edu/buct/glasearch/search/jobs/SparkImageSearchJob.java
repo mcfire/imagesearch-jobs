@@ -1,6 +1,7 @@
 package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.Serializable;
@@ -157,12 +158,12 @@ public class SparkImageSearchJob implements Serializable {
 		addToList(JavaSparkContext.jarOfClass(HBaseZeroCopyByteString.class), jars);
 		addToList(JavaSparkContext.jarOfClass(LazyStringArrayList.class), jars);
 
-//		String classPath = "";
-//		File libs = new File(classPath);
-//		for (String lib : libs.list()) {
-//			if (!lib.endsWith(".jar")) continue;
-//			jars.add(lib);
-//		}
+		String classPath = "/mnt/hgfs/ImageRetrieval/imagesearch-jobs/target/appassembler/repo";
+		File libs = new File(classPath);
+		for (File lib : libs.listFiles()) {
+			if (!lib.getAbsolutePath().endsWith(".jar")) continue;
+			jars.add(lib.getAbsolutePath());
+		}
 		
 		JavaSparkContext ctx = new JavaSparkContext(
 				masterAddress, 
