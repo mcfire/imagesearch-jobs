@@ -136,9 +136,9 @@ public class ImageIndexJob extends
 		Configuration conf = new Configuration();
 
 		//FIXME use local fs for debug usage. 
-	    //conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
-	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
-	    //conf.set("mapreduce.framework.name", "yarn");
+	    conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
+	    conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
+	    conf.set("mapreduce.framework.name", "yarn");
 	    Date startTime = new Date();
 	    
 		Job job = configureJob(conf);

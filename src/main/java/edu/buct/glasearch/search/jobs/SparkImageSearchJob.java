@@ -1,6 +1,7 @@
 package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.Serializable;
@@ -32,7 +33,6 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.hadoop.hbase.thrift2.ThriftServer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.vint.UVLongTool;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -124,6 +124,23 @@ public class SparkImageSearchJob implements Serializable {
 		}
 	}
 	
+	public static class FeatureFilter extends Function<Tuple2<Double,ImageSearchJob.FeatureObject>,Boolean> {
+
+		private static final long serialVersionUID = -8897212007359320125L;
+		
+		FeatureObject.FeatureType targetFeatureType;
+		
+		public FeatureFilter(FeatureObject.FeatureType targetFeatureType) {
+			this.targetFeatureType = targetFeatureType;
+		}
+
+		@Override
+		public Boolean call(Tuple2<Double, FeatureObject> feature)
+				throws Exception {
+			return feature._2.getType() == this.targetFeatureType;
+		}
+	}
+	
 	private static void addToList(String[] array, Set<String> list) {
 		if (array == null || list == null) return;
 		for (String element : array) {
@@ -150,18 +167,17 @@ public class SparkImageSearchJob implements Serializable {
 		addToList(JavaSparkContext.jarOfClass(HBaseProtos.class), jars);
 		addToList(JavaSparkContext.jarOfClass(JobUtil.class), jars);
 		addToList(JavaSparkContext.jarOfClass(CompatibilityFactory.class), jars);
-		addToList(JavaSparkContext.jarOfClass(UVLongTool.class), jars);
 		addToList(JavaSparkContext.jarOfClass(ThriftServer.class), jars);
 		addToList(JavaSparkContext.jarOfClass(org.cloudera.htrace.Trace.class), jars);
 		
 		addToList(JavaSparkContext.jarOfClass(HBaseZeroCopyByteString.class), jars);
 		addToList(JavaSparkContext.jarOfClass(LazyStringArrayList.class), jars);
 
-//		String classPath = "";
+//		String classPath = "/mnt/hgfs/ImageRetrieval/imagesearch-jobs/target/appassembler/repo";
 //		File libs = new File(classPath);
-//		for (String lib : libs.list()) {
-//			if (!lib.endsWith(".jar")) continue;
-//			jars.add(lib);
+//		for (File lib : libs.listFiles()) {
+//			if (!lib.getAbsolutePath().endsWith(".jar")) continue;
+//			jars.add(lib.getAbsolutePath());
 //		}
 		
 		JavaSparkContext ctx = new JavaSparkContext(
@@ -221,27 +237,13 @@ public class SparkImageSearchJob implements Serializable {
 		JavaPairRDD<Double, FeatureObject> colorRdd = hbaseData.flatMap(map);
 		JavaPairRDD<Double, FeatureObject> edgeRdd = colorRdd.cache();
 		
-		List<Tuple2<Double, FeatureObject>> colorResult = colorRdd.filter(new Function<Tuple2<Double,ImageSearchJob.FeatureObject>,Boolean>() {
-
-			private static final long serialVersionUID = -8897212007359320125L;
-
-			@Override
-			public Boolean call(Tuple2<Double, FeatureObject> feature)
-					throws Exception {
-				return feature._2.getType() == FeatureObject.FeatureType.color;
-			}
-		}).sortByKey(false).collect();
+		List<Tuple2<Double, FeatureObject>> colorResult = colorRdd.
+				filter(new FeatureFilter(FeatureObject.FeatureType.color)).
+				sortByKey(true).take(20);
 		
-		List<Tuple2<Double, FeatureObject>> edgeResult = edgeRdd.filter(new Function<Tuple2<Double,ImageSearchJob.FeatureObject>,Boolean>() {
-
-			private static final long serialVersionUID = -4533280931765784913L;
-
-			@Override
-			public Boolean call(Tuple2<Double, FeatureObject> feature)
-					throws Exception {
-				return feature._2.getType() == FeatureObject.FeatureType.edge;
-			}
-		}).sortByKey(false).collect();
+		List<Tuple2<Double, FeatureObject>> edgeResult = edgeRdd.
+				filter(new FeatureFilter(FeatureObject.FeatureType.edge)).
+				sortByKey(true).collect();
 
 		edgeResult.size();
 	}

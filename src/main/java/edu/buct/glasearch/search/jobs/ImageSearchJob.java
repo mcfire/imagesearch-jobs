@@ -173,7 +173,7 @@ public class ImageSearchJob {
 			float edgeDistance = targetEdgeFeature.getDistance(edgeFeature);//计算和待检索图像特征之间的距离
 			double flatEdgeDistance = (edgeDistance - edgeAvg) / edgeSigma;	//距离归一化
 			FeatureObject edgeFeatureObject = new FeatureObject(
-					rowId, (float)flatEdgeDistance, FeatureObject.FeatureType.color);//生成距离对象
+					rowId, (float)flatEdgeDistance, FeatureObject.FeatureType.edge);//生成距离对象
 			
 			//以JSON的格式将特征距离对象写入到Map的输入。输出按照特征类型分类
 			context.write(new Text(COLOR_FEATURE_RESULT), new Text(gson.toJson(colorFeatureObject)));
@@ -275,10 +275,7 @@ public class ImageSearchJob {
 		@Override
 		public int compareTo(FeatureObject o) {
 			if (o == null) return 1;
-			
-			if (this.type.ordinal() != o.type.ordinal()) {
-				return new Integer(this.type.ordinal()).compareTo(o.type.ordinal());
-			}
+
 			return this.distance > o.distance ? 1 : (this.distance == o.distance ? 0 : -1);
 		}
 		
@@ -374,7 +371,7 @@ public class ImageSearchJob {
 	    
 	    conf.set(SEARCH_ROWID, rowId);
 	    
-		Job job = configureJob(conf, Bytes.toBytes(START_ROW),  Bytes.toBytes(STOP_ROW));
+		Job job = configureJob(conf, null,  null);
 
 		boolean isSuccess = job.waitForCompletion(true);
 		
