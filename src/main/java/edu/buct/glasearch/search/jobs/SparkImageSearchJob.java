@@ -1,7 +1,6 @@
 package edu.buct.glasearch.search.jobs;
 
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.Serializable;
@@ -39,10 +38,11 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 
+import scala.Tuple2;
+
 import com.google.protobuf.HBaseZeroCopyByteString;
 import com.google.protobuf.LazyStringArrayList;
 
-import scala.Tuple2;
 import edu.buct.glasearch.search.jobs.ImageSearchJob.FeatureObject;
 
 public class SparkImageSearchJob implements Serializable {
