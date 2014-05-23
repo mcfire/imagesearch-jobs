@@ -351,7 +351,8 @@ public class ImageSearchJob {
 	    //conf.set("fs.defaultFS", "hdfs://cluster1.centos:8020");
 	    //conf.set("yarn.resourcemanager.address", "cluster1.centos:8032");
 	    //conf.set("mapreduce.framework.name", "yarn");
-	    String imageFileName = "/root/development/data/images/39/39115.jpg";
+	    //String imageFileName = "/root/development/data/images/39/39115.jpg";
+	    String imageFileName = "E:/document/学业相关/控制工程/图像搜索/素材/GoogleGlass.jpg";
 		String START_ROW = "39";
 		String STOP_ROW = "39-393300";
 	    
